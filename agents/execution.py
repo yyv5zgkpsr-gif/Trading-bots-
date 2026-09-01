@@ -27,6 +27,12 @@ except ImportError:  # pragma: no cover - exercised only when dependency missing
     stdio_client = None
 
 
+def _extract_order_id(payload: dict):
+    if "error" in payload:
+        raise RuntimeError(payload["error"])
+    return payload.get("order_id")
+
+
 class ExecutionAgent(Agent):
     name = "execution"
 
@@ -58,10 +64,11 @@ class ExecutionAgent(Agent):
                         "side": risk.action.lower(),
                         "quantity": risk.position_size_shares,
                         "order_type": "market",
+                        "price": risk.entry_price,
                         "stop_loss": risk.stop_loss_price,
                         "take_profit": risk.take_profit_price,
                     },
-                    lambda payload: payload.get("order_id"),
+                    _extract_order_id,
                 )
             )
         except Exception as exc:

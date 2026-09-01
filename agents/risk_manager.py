@@ -74,4 +74,5 @@ class RiskManagerAgent(Agent):
             stop_loss_price=stop_loss,
             take_profit_price=take_profit,
             reasoning=reasoning,
+            entry_price=price,
         )

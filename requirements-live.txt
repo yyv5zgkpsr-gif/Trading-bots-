@@ -1,0 +1,4 @@
+# Only needed if you run the Robinhood MCP server with ROBINHOOD_MCP_MODE=live.
+# The default paper-trading mode does not require this.
+-r requirements.txt
+robin_stocks>=3.4.0

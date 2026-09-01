@@ -85,6 +85,7 @@ class RiskDecision:
     stop_loss_price: Optional[float]
     take_profit_price: Optional[float]
     reasoning: str
+    entry_price: Optional[float] = None
 
 
 @dataclass

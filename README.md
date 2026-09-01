@@ -48,6 +48,7 @@ Robinhood MCP server.
 | `data/` | Data access: yfinance wrappers, news/filing fetchers. |
 | `models/schemas.py` | Dataclasses passed between agents. |
 | `main.py` | CLI: `python main.py AAPL`. |
+| `robinhood_mcp/` | The bundled Robinhood MCP server (paper-trading by default; optional live mode). |
 
 ## Design notes
 
@@ -60,11 +61,24 @@ Robinhood MCP server.
 - **Execution is Robinhood-MCP-only, dry-run by default.** `ExecutionAgent`
   never calls a brokerage API directly. It only places a live order when both
   `ENABLE_LIVE_TRADING=true` and `ROBINHOOD_MCP_COMMAND` (the command that
-  launches *your own* trusted Robinhood MCP server, exposing `place_order` and
-  `get_account` tools) are set. This repository does not include a Robinhood
-  MCP server implementation — bring your own and point the env var at it.
-  Without that configuration, every run only logs what it *would* have
-  submitted.
+  launches an MCP server exposing `place_order`/`get_account`/`get_positions`
+  tools) are set. Without that configuration, every run only logs what it
+  *would* have submitted.
+- **A Robinhood MCP server ships in `robinhood_mcp/`** (run it with
+  `ROBINHOOD_MCP_COMMAND=python -m robinhood_mcp.server`). It has two modes,
+  selected by `ROBINHOOD_MCP_MODE`:
+  - `paper` (default): a local, file-backed simulated ledger
+    (`robinhood_mcp/paper_state.json`, path configurable via
+    `PAPER_STATE_PATH`) seeded with `PAPER_STARTING_CASH`. No brokerage
+    account or credentials involved — orders fill instantly at the price the
+    risk manager computed.
+  - `live`: places **real** orders on a **real** Robinhood account via the
+    unofficial `robin_stocks` library (`pip install -r requirements-live.txt`).
+    Requires `ROBINHOOD_USERNAME`/`ROBINHOOD_PASSWORD` (and `ROBINHOOD_MFA_CODE`
+    if your account needs a TOTP code); the server refuses to start if login
+    fails rather than silently falling back to paper mode. Stop-loss/take-profit
+    are recorded in the order response for your own reference only — Robinhood's
+    API has no atomic bracket order, so no separate stop order is placed for you.
 - **Account equity for position sizing** is resolved in order: an explicit
   `--equity` CLI flag, then live equity from the Robinhood MCP server's
   `get_account` tool (only queried when live trading is configured), then the
@@ -85,18 +99,33 @@ python main.py AAPL
 python main.py AAPL --equity 25000 --json
 ```
 
+## Trying the full pipeline against the bundled paper broker
+
+```bash
+export ENABLE_LIVE_TRADING=true
+export ROBINHOOD_MCP_COMMAND="python -m robinhood_mcp.server"
+python main.py AAPL
+```
+
+This still involves no real money: `ROBINHOOD_MCP_MODE` defaults to `paper`,
+so orders fill against the local simulated ledger. `main.py` itself never
+knows the difference — it always talks to `ExecutionAgent`, which always talks
+to whatever `ROBINHOOD_MCP_COMMAND` points at.
+
 ## Tests
 
 ```bash
 pytest
 ```
 
-Tests mock all network calls (`yfinance`, news, LLM, MCP) so they run offline
-and deterministically.
+Tests mock all network calls (`yfinance`, news, LLM) so they run offline and
+deterministically. The `robinhood_mcp` paper broker and MCP tool wiring are
+exercised directly (no network), and `agents/execution.py` is additionally
+covered by driving the real MCP server over stdio end to end.
 
 ## Disclaimer
 
 This is research/education tooling, not financial advice. Trading involves
 risk of loss. Review and understand every agent's logic — especially
-`risk_manager.py` and `execution.py` — before ever setting `ENABLE_LIVE_TRADING=true`
-against a real brokerage account.
+`risk_manager.py`, `agents/execution.py`, and `robinhood_mcp/live_broker.py` —
+before ever setting `ROBINHOOD_MCP_MODE=live` against a real brokerage account.
