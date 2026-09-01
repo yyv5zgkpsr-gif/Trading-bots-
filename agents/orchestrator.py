@@ -18,6 +18,10 @@ class Orchestrator:
 
     News/Technical/Fundamental (parallel) -> Sentiment + Market Regime (parallel)
     -> Bull/Bear Debate -> Risk Manager -> Execution (Robinhood MCP, dry-run by default).
+
+    Account equity for position sizing is resolved in order: an explicit
+    ``account_equity`` argument, then live equity from the Robinhood MCP server
+    (only queried when live trading is configured), then ``DEFAULT_ACCOUNT_EQUITY``.
     """
 
     def __init__(self):
@@ -31,9 +35,10 @@ class Orchestrator:
         self.execution_agent = ExecutionAgent()
 
     def run(self, ticker: str, account_equity: float = None) -> TradeDecision:
-        account_equity = account_equity if account_equity is not None else float(
-            os.environ.get("DEFAULT_ACCOUNT_EQUITY", "10000")
-        )
+        if account_equity is None:
+            account_equity = self.execution_agent.get_account_equity()
+        if account_equity is None:
+            account_equity = float(os.environ.get("DEFAULT_ACCOUNT_EQUITY", "10000"))
 
         with ThreadPoolExecutor(max_workers=3) as pool:
             news_future = pool.submit(self.news_agent.run, ticker)

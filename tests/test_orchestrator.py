@@ -86,7 +86,7 @@ def test_orchestrator_wires_agents_and_assembles_decision():
     assert decision.execution is execution
 
 
-def test_orchestrator_defaults_account_equity_from_env(monkeypatch):
+def test_orchestrator_defaults_account_equity_from_env_when_no_live_equity(monkeypatch):
     news, technical, fundamental, sentiment, regime, debate, risk, execution = _stub_reports()
     monkeypatch.setenv("DEFAULT_ACCOUNT_EQUITY", "42000")
 
@@ -98,8 +98,52 @@ def test_orchestrator_defaults_account_equity_from_env(monkeypatch):
     orchestrator.regime_agent = MagicMock(run=MagicMock(return_value=regime))
     orchestrator.debate_agent = MagicMock(run=MagicMock(return_value=debate))
     orchestrator.risk_agent = MagicMock(run=MagicMock(return_value=risk))
-    orchestrator.execution_agent = MagicMock(run=MagicMock(return_value=execution))
+    orchestrator.execution_agent = MagicMock(
+        run=MagicMock(return_value=execution), get_account_equity=MagicMock(return_value=None)
+    )
 
     orchestrator.run("AAPL")
 
     orchestrator.risk_agent.run.assert_called_once_with(debate, technical, 42000.0)
+
+
+def test_orchestrator_prefers_live_account_equity_over_env_default(monkeypatch):
+    news, technical, fundamental, sentiment, regime, debate, risk, execution = _stub_reports()
+    monkeypatch.setenv("DEFAULT_ACCOUNT_EQUITY", "42000")
+
+    orchestrator = Orchestrator()
+    orchestrator.news_agent = MagicMock(run=MagicMock(return_value=news))
+    orchestrator.technical_agent = MagicMock(run=MagicMock(return_value=technical))
+    orchestrator.fundamental_agent = MagicMock(run=MagicMock(return_value=fundamental))
+    orchestrator.sentiment_agent = MagicMock(run=MagicMock(return_value=sentiment))
+    orchestrator.regime_agent = MagicMock(run=MagicMock(return_value=regime))
+    orchestrator.debate_agent = MagicMock(run=MagicMock(return_value=debate))
+    orchestrator.risk_agent = MagicMock(run=MagicMock(return_value=risk))
+    orchestrator.execution_agent = MagicMock(
+        run=MagicMock(return_value=execution), get_account_equity=MagicMock(return_value=17_500.0)
+    )
+
+    orchestrator.run("AAPL")
+
+    orchestrator.risk_agent.run.assert_called_once_with(debate, technical, 17_500.0)
+
+
+def test_orchestrator_explicit_equity_overrides_live_lookup():
+    news, technical, fundamental, sentiment, regime, debate, risk, execution = _stub_reports()
+
+    orchestrator = Orchestrator()
+    orchestrator.news_agent = MagicMock(run=MagicMock(return_value=news))
+    orchestrator.technical_agent = MagicMock(run=MagicMock(return_value=technical))
+    orchestrator.fundamental_agent = MagicMock(run=MagicMock(return_value=fundamental))
+    orchestrator.sentiment_agent = MagicMock(run=MagicMock(return_value=sentiment))
+    orchestrator.regime_agent = MagicMock(run=MagicMock(return_value=regime))
+    orchestrator.debate_agent = MagicMock(run=MagicMock(return_value=debate))
+    orchestrator.risk_agent = MagicMock(run=MagicMock(return_value=risk))
+    orchestrator.execution_agent = MagicMock(
+        run=MagicMock(return_value=execution), get_account_equity=MagicMock(return_value=17_500.0)
+    )
+
+    orchestrator.run("AAPL", account_equity=5_000.0)
+
+    orchestrator.execution_agent.get_account_equity.assert_not_called()
+    orchestrator.risk_agent.run.assert_called_once_with(debate, technical, 5_000.0)

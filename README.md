@@ -60,10 +60,15 @@ Robinhood MCP server.
 - **Execution is Robinhood-MCP-only, dry-run by default.** `ExecutionAgent`
   never calls a brokerage API directly. It only places a live order when both
   `ENABLE_LIVE_TRADING=true` and `ROBINHOOD_MCP_COMMAND` (the command that
-  launches *your own* trusted Robinhood MCP server, exposing a `place_order`
-  tool) are set. This repository does not include a Robinhood MCP server
-  implementation — bring your own and point the env var at it. Without that
-  configuration, every run only logs what it *would* have submitted.
+  launches *your own* trusted Robinhood MCP server, exposing `place_order` and
+  `get_account` tools) are set. This repository does not include a Robinhood
+  MCP server implementation — bring your own and point the env var at it.
+  Without that configuration, every run only logs what it *would* have
+  submitted.
+- **Account equity for position sizing** is resolved in order: an explicit
+  `--equity` CLI flag, then live equity from the Robinhood MCP server's
+  `get_account` tool (only queried when live trading is configured), then the
+  `DEFAULT_ACCOUNT_EQUITY` env var.
 
 ## Setup
 

@@ -50,7 +50,20 @@ class ExecutionAgent(Agent):
             return ExecutionResult(executed=False, dry_run=True, order_id=None, details=details)
 
         try:
-            order_id = asyncio.run(self._place_order_via_mcp(ticker, risk))
+            order_id = asyncio.run(
+                self._call_tool(
+                    "place_order",
+                    {
+                        "symbol": ticker,
+                        "side": risk.action.lower(),
+                        "quantity": risk.position_size_shares,
+                        "order_type": "market",
+                        "stop_loss": risk.stop_loss_price,
+                        "take_profit": risk.take_profit_price,
+                    },
+                    lambda payload: payload.get("order_id"),
+                )
+            )
         except Exception as exc:
             return ExecutionResult(executed=False, dry_run=False, order_id=None, details=f"Execution failed: {exc}")
 
@@ -61,27 +74,43 @@ class ExecutionAgent(Agent):
             details=f"Submitted {risk.action} order for {risk.position_size_shares} shares of {ticker} via Robinhood MCP.",
         )
 
-    async def _place_order_via_mcp(self, ticker: str, risk: RiskDecision) -> Optional[str]:
+    def get_account_equity(self) -> Optional[float]:
+        """Live account equity from the Robinhood MCP server's ``get_account`` tool.
+
+        Returns ``None`` (rather than raising) whenever live trading isn't
+        configured, or the call fails for any reason — callers are expected to
+        fall back to a configured default in that case.
+        """
+        if not self.enable_live or not self.mcp_command or ClientSession is None:
+            return None
+
+        def _extract_equity(payload: dict):
+            for key in ("equity", "portfolio_value", "buying_power"):
+                if payload.get(key) is not None:
+                    try:
+                        return float(payload[key])
+                    except (TypeError, ValueError):
+                        continue
+            return None
+
+        try:
+            return asyncio.run(self._call_tool("get_account", {}, _extract_equity))
+        except Exception:
+            return None
+
+    async def _call_tool(self, tool_name: str, arguments: dict, extract):
+        """Opens an MCP session, calls ``tool_name``, and applies ``extract`` to the
+        first parseable JSON text block of the response (raw text if not JSON)."""
         command_parts = shlex.split(self.mcp_command)
         server_params = StdioServerParameters(command=command_parts[0], args=command_parts[1:])
         async with stdio_client(server_params) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()
-                result = await session.call_tool(
-                    "place_order",
-                    arguments={
-                        "symbol": ticker,
-                        "side": risk.action.lower(),
-                        "quantity": risk.position_size_shares,
-                        "order_type": "market",
-                        "stop_loss": risk.stop_loss_price,
-                        "take_profit": risk.take_profit_price,
-                    },
-                )
+                result = await session.call_tool(tool_name, arguments=arguments)
                 for block in result.content:
                     if getattr(block, "type", "") == "text":
                         try:
-                            return json.loads(block.text).get("order_id")
+                            return extract(json.loads(block.text))
                         except (json.JSONDecodeError, AttributeError):
                             return block.text
                 return None
