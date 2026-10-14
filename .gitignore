@@ -7,3 +7,4 @@ venv/
 *.egg-info/
 .DS_Store
 robinhood_mcp/paper_state.json
+robinhood_mcp/risk_levels.json

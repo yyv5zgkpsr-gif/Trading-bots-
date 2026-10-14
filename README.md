@@ -49,6 +49,7 @@ Robinhood MCP server.
 | `models/schemas.py` | Dataclasses passed between agents. |
 | `main.py` | CLI: `python main.py AAPL`. |
 | `robinhood_mcp/` | The bundled Robinhood MCP server (paper-trading by default; optional live mode). |
+| `robinhood_mcp/monitor.py` | Standalone exit-monitoring loop for live-mode stop-loss/take-profit. |
 
 ## Design notes
 
@@ -79,6 +80,19 @@ Robinhood MCP server.
     fails rather than silently falling back to paper mode. Stop-loss/take-profit
     are recorded in the order response for your own reference only — Robinhood's
     API has no atomic bracket order, so no separate stop order is placed for you.
+    See **Exit monitoring** below for the alternative this repo actually ships.
+- **Exit monitoring for live-mode stops (`robinhood_mcp/monitor.py`).** Every
+  `place_order` call with a `stop_loss`/`take_profit` is recorded in a small
+  file-backed ledger (`robinhood_mcp/risk_ledger.py`); a `sell` clears it.
+  `python -m robinhood_mcp.monitor` is a separate long-lived process that polls
+  that ledger against live quotes (`get_quote`, live mode only) every
+  `MONITOR_POLL_SECONDS` (default 30s) and submits a market sell the instant a
+  level is breached. It talks to the exact same MCP server as everything
+  else — same `ROBINHOOD_MCP_COMMAND`. It is polling-based (not a live price
+  stream), always exits the full position at market, and protects nothing
+  while it isn't running — run it under something that restarts it (systemd,
+  a supervisor) for real unattended use. There is nothing to monitor in paper
+  mode: `get_quote` has no real market data feed there and errors on purpose.
 - **Account equity for position sizing** is resolved in order: an explicit
   `--equity` CLI flag, then live equity from the Robinhood MCP server's
   `get_account` tool (only queried when live trading is configured), then the
