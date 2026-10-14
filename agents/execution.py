@@ -33,6 +33,16 @@ def _extract_order_id(payload: dict):
     return payload.get("order_id")
 
 
+def _innermost_exception_message(exc: BaseException) -> str:
+    """anyio's structured concurrency wraps task-group failures in an
+    ExceptionGroup, which buries our actual error message inside `.exceptions`.
+    Unwrap to the leaf exception so callers see the real reason, not
+    "unhandled errors in a TaskGroup"."""
+    while getattr(exc, "exceptions", None):
+        exc = exc.exceptions[0]
+    return str(exc)
+
+
 class ExecutionAgent(Agent):
     name = "execution"
 
@@ -72,7 +82,8 @@ class ExecutionAgent(Agent):
                 )
             )
         except Exception as exc:
-            return ExecutionResult(executed=False, dry_run=False, order_id=None, details=f"Execution failed: {exc}")
+            message = _innermost_exception_message(exc)
+            return ExecutionResult(executed=False, dry_run=False, order_id=None, details=f"Execution failed: {message}")
 
         return ExecutionResult(
             executed=True,
@@ -109,7 +120,14 @@ class ExecutionAgent(Agent):
         """Opens an MCP session, calls ``tool_name``, and applies ``extract`` to the
         first parseable JSON text block of the response (raw text if not JSON)."""
         command_parts = shlex.split(self.mcp_command)
-        server_params = StdioServerParameters(command=command_parts[0], args=command_parts[1:])
+        # mcp's stdio_client only forwards a small safety allowlist (PATH, HOME, ...)
+        # to the spawned server by default, dropping everything else — including
+        # ROBINHOOD_MCP_MODE, the paper-broker settings, and live-mode credentials.
+        # ROBINHOOD_MCP_COMMAND is a command the user explicitly configured and is
+        # documented to "run and trust", so pass the full environment through.
+        server_params = StdioServerParameters(
+            command=command_parts[0], args=command_parts[1:], env=dict(os.environ)
+        )
         async with stdio_client(server_params) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()

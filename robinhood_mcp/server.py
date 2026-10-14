@@ -11,10 +11,13 @@ in live mode if login fails, rather than silently falling back to paper.
 
 import os
 
+from dotenv import load_dotenv
 from mcp.server.mcpserver import MCPServer
 
 from robinhood_mcp.errors import BrokerError
 from robinhood_mcp.paper_broker import PaperBroker
+
+load_dotenv()  # so `python -m robinhood_mcp.server` also works standalone, outside main.py
 
 MODE = os.environ.get("ROBINHOOD_MCP_MODE", "paper").lower()
 
