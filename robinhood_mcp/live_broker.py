@@ -78,6 +78,12 @@ class LiveBroker:
             )
         return result
 
+    def get_quote(self, symbol: str) -> float:
+        prices = rh.stocks.get_latest_price(symbol)
+        if not prices or prices[0] in (None, ""):
+            raise BrokerError(f"Could not fetch a quote for {symbol!r}.")
+        return float(prices[0])
+
     def place_order(
         self, symbol: str, side: str, quantity: int, order_type: str = "market", price: float = None
     ) -> dict:

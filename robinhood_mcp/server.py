@@ -16,6 +16,7 @@ from mcp.server.mcpserver import MCPServer
 
 from robinhood_mcp.errors import BrokerError
 from robinhood_mcp.paper_broker import PaperBroker
+from robinhood_mcp.risk_ledger import RiskLedger
 
 load_dotenv()  # so `python -m robinhood_mcp.server` also works standalone, outside main.py
 
@@ -34,6 +35,7 @@ else:
     raise SystemExit(f"[robinhood-mcp] unknown ROBINHOOD_MCP_MODE={MODE!r}; expected 'paper' or 'live'.")
 
 server = MCPServer("robinhood-mcp")
+risk_ledger = RiskLedger()
 
 
 @server.tool()
@@ -66,13 +68,40 @@ def place_order(
     and take_profit are recorded in the response for your own reference only
     and are not placed as separate bracket orders.
     """
+    side_lower = side.lower()
     try:
-        result = broker.place_order(symbol, side.lower(), int(quantity), order_type, price)
+        result = broker.place_order(symbol, side_lower, int(quantity), order_type, price)
     except BrokerError as exc:
         return {"error": str(exc)}
     result["stop_loss"] = stop_loss
     result["take_profit"] = take_profit
+
+    # Record risk intent so robinhood_mcp/monitor.py has something to check
+    # positions against later — Robinhood's API has no bracket order, so this
+    # is the only place that remembers a stop_loss/take_profit was asked for.
+    if side_lower == "buy" and (stop_loss is not None or take_profit is not None):
+        risk_ledger.record(symbol, side_lower, stop_loss, take_profit)
+    elif side_lower == "sell":
+        risk_ledger.clear(symbol)
+
     return result
+
+
+@server.tool()
+def get_risk_levels() -> dict:
+    """Return the stop_loss/take_profit recorded for each symbol's open buy order."""
+    return risk_ledger.all()
+
+
+@server.tool()
+def get_quote(symbol: str) -> dict:
+    """Return the latest market price for `symbol`. Live mode only — paper
+    mode has no real market data feed and returns an error."""
+    try:
+        price = broker.get_quote(symbol)
+    except BrokerError as exc:
+        return {"error": str(exc)}
+    return {"symbol": symbol, "price": price}
 
 
 def main():
