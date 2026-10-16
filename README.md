@@ -50,6 +50,7 @@ Robinhood MCP server.
 | `main.py` | CLI: `python main.py AAPL`. |
 | `robinhood_mcp/` | The bundled Robinhood MCP server (paper-trading by default; optional live mode). |
 | `robinhood_mcp/monitor.py` | Standalone exit-monitoring loop for live-mode stop-loss/take-profit. |
+| `backtest/` | Backtests the technical+regime+risk-manager slice of the strategy against historical data. |
 
 ## Design notes
 
@@ -98,6 +99,38 @@ Robinhood MCP server.
   `get_account` tool (only queried when live trading is configured), then the
   `DEFAULT_ACCOUNT_EQUITY` env var.
 
+## Backtesting before you tune for trade frequency
+
+Before loosening `MIN_CONVICTION` or scanning more tickers to get *more*
+trades, find out whether the strategy you already have is actually
+profitable — more trades is not the same axis as more profit, and on a
+Robinhood account under $25k the Pattern Day Trader rule caps you at 3 day
+trades per rolling 5 business days regardless of what the code does.
+
+```bash
+python -m backtest.runner AAPL --period 2y
+python -m backtest.runner AAPL --period 5y --equity 25000
+```
+
+This replays `agents/technical.py` + `agents/market_regime.py` +
+`agents/risk_manager.py` day by day against historical daily bars, deciding
+with data only through each day's close and executing at the next day's
+open (no lookahead), checking the recorded stop-loss/take-profit against
+each day's High/Low. It reports total return, number of round-trip trades,
+win rate, average win/loss, profit factor, max drawdown, and an annualized
+Sharpe ratio.
+
+**What it does *not* validate:** `agents/news_catalyst.py`,
+`agents/fundamental.py`, `agents/sentiment.py`, and the LLM-driven bull/bear
+debate in `agents/debate.py` are excluded — today's headlines aren't
+reproducible as of a past date, and nobody wants one LLM call per symbol per
+historical day. So a backtest result describes the technical+regime+
+risk-manager slice of the strategy, not the full live pipeline; live
+performance will differ, in either direction. Use it to sanity-check
+`MAX_POSITION_PCT`, `MIN_CONVICTION`, `DEFAULT_STOP_LOSS_PCT`, and
+`DEFAULT_TAKE_PROFIT_PCT` against real numbers before changing them, not as
+a guarantee of live results.
+
 ## Setup
 
 ```bash
@@ -134,8 +167,10 @@ pytest
 
 Tests mock all network calls (`yfinance`, news, LLM) so they run offline and
 deterministically. The `robinhood_mcp` paper broker and MCP tool wiring are
-exercised directly (no network), and `agents/execution.py` is additionally
-covered by driving the real MCP server over stdio end to end.
+exercised directly (no network), `agents/execution.py` is additionally
+covered by driving the real MCP server over stdio end to end, and
+`backtest/` is covered against synthetic OHLC data (its `run_backtest`
+accepts pre-built DataFrames for exactly this).
 
 ## Disclaimer
 
