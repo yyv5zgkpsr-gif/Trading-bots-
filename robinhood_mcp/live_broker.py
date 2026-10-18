@@ -14,8 +14,7 @@ half-implementing that risk control would be worse than not implementing it.
 Manage exits yourself (e.g. a monitoring loop that re-invokes place_order).
 """
 
-import os
-
+from robinhood_mcp.auth import ensure_login
 from robinhood_mcp.errors import BrokerError
 
 try:
@@ -26,27 +25,7 @@ except ImportError:  # pragma: no cover - exercised only when dependency missing
 
 class LiveBroker:
     def __init__(self):
-        if rh is None:
-            raise BrokerError(
-                "robin_stocks is not installed. Run `pip install robin_stocks` to use ROBINHOOD_MCP_MODE=live."
-            )
-
-        username = os.environ.get("ROBINHOOD_USERNAME")
-        password = os.environ.get("ROBINHOOD_PASSWORD")
-        mfa_code = os.environ.get("ROBINHOOD_MFA_CODE")
-        if not username or not password:
-            raise BrokerError("ROBINHOOD_USERNAME and ROBINHOOD_PASSWORD must be set to use ROBINHOOD_MCP_MODE=live.")
-
-        login_kwargs = {"username": username, "password": password, "store_session": True}
-        if mfa_code:
-            login_kwargs["mfa_code"] = mfa_code
-
-        try:
-            login_result = rh.login(**login_kwargs)
-        except Exception as exc:
-            raise BrokerError(f"Robinhood login failed: {exc}") from exc
-        if not login_result or not login_result.get("access_token"):
-            raise BrokerError("Robinhood login failed: no access token returned. Check credentials/MFA.")
+        ensure_login()
 
     def get_account(self) -> dict:
         portfolio = rh.profiles.load_portfolio_profile() or {}
@@ -77,6 +56,12 @@ class LiveBroker:
                 }
             )
         return result
+
+    def get_quote(self, symbol: str) -> float:
+        prices = rh.stocks.get_latest_price(symbol)
+        if not prices or prices[0] in (None, ""):
+            raise BrokerError(f"Could not fetch a quote for {symbol!r}.")
+        return float(prices[0])
 
     def place_order(
         self, symbol: str, side: str, quantity: int, order_type: str = "market", price: float = None
