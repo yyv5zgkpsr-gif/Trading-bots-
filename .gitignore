@@ -8,3 +8,4 @@ venv/
 .DS_Store
 robinhood_mcp/paper_state.json
 robinhood_mcp/risk_levels.json
+robinhood_mcp/crypto_paper_state.json

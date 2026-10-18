@@ -49,8 +49,9 @@ Robinhood MCP server.
 | `models/schemas.py` | Dataclasses passed between agents. |
 | `main.py` | CLI: `python main.py AAPL`. |
 | `robinhood_mcp/` | The bundled Robinhood MCP server (paper-trading by default; optional live mode). |
-| `robinhood_mcp/monitor.py` | Standalone exit-monitoring loop for live-mode stop-loss/take-profit. |
+| `robinhood_mcp/monitor.py` | Standalone exit-monitoring loop for live-mode stop-loss/take-profit (stocks and crypto). |
 | `backtest/` | Backtests the technical+regime+risk-manager slice of the strategy against historical data. |
+| `agents/crypto_*.py`, `crypto_main.py` | The parallel crypto pipeline — see **Crypto** below. |
 
 ## Design notes
 
@@ -98,6 +99,47 @@ Robinhood MCP server.
   `--equity` CLI flag, then live equity from the Robinhood MCP server's
   `get_account` tool (only queried when live trading is configured), then the
   `DEFAULT_ACCOUNT_EQUITY` env var.
+
+## Crypto
+
+```bash
+python crypto_main.py BTC
+python crypto_main.py ETH --equity 5000 --json
+```
+
+Same safety pattern as stocks: dry-run unless `ENABLE_LIVE_TRADING=true` and
+`ROBINHOOD_MCP_COMMAND` are both set, and that command still defaults to
+`ROBINHOOD_MCP_MODE=paper` (no real money). Crypto trades under the *same*
+Robinhood login as stocks — `robinhood_mcp/auth.py` logs in once and both
+`LiveBroker` and `CryptoLiveBroker` share it — but with its own buying-power
+balance, its own paper cash pool (`CRYPTO_PAPER_STARTING_CASH`, separate
+from `PAPER_STARTING_CASH`), and fractional quantities instead of whole
+shares.
+
+**The crypto pipeline is deliberately narrower than the stock one:**
+`agents/crypto_orchestrator.py` is Technical → Debate → Risk Manager →
+Execution, with no news/fundamental/sentiment agent and no market-regime
+check (SPY/VIX don't mean anything for an asset that trades 24/7) — so
+`agents/crypto_debate.py`'s conviction is the technical score alone. That's
+a smaller pipeline on purpose, not a degraded one; extend it the same way
+the stock side extended from technical-only before fundamentals/sentiment
+existed, if you want more signal.
+
+**Exit monitoring and the backtester both already cover crypto with no
+changes**, because they're symbol-agnostic: `robinhood_mcp/risk_ledger.py`
+and `robinhood_mcp/monitor.py` don't care whether a symbol is a stock or
+`BTC`, and `backtest/runner.py`'s technical+risk-manager loop works on any
+OHLC history you hand it — fetch crypto history via `yfinance`'s
+`BTC-USD`/`ETH-USD` convention (see `agents/crypto_technical.py` for the
+symbol mapping Robinhood's bare-ticker API needs vs. yfinance's) and pass
+it to `backtest.runner.run_backtest` the same way.
+
+**Unverified against a real account, same honesty as live_broker.py:**
+`robinhood_mcp/crypto_live_broker.py` is built from `robin_stocks`'
+documented crypto API (inspected from the installed package, not exercised
+against a real login — this environment has no network path to Robinhood).
+Review it, especially the position-field mapping, before trusting it with
+real money.
 
 ## Backtesting before you tune for trade frequency
 
@@ -166,15 +208,20 @@ pytest
 ```
 
 Tests mock all network calls (`yfinance`, news, LLM) so they run offline and
-deterministically. The `robinhood_mcp` paper broker and MCP tool wiring are
-exercised directly (no network), `agents/execution.py` is additionally
-covered by driving the real MCP server over stdio end to end, and
-`backtest/` is covered against synthetic OHLC data (its `run_backtest`
-accepts pre-built DataFrames for exactly this).
+deterministically. The `robinhood_mcp` paper brokers (stock and crypto) and
+MCP tool wiring are exercised directly (no network), `agents/execution.py`
+and `agents/crypto_execution.py` are additionally covered by driving the
+real MCP server over stdio end to end, and `backtest/` is covered against
+synthetic OHLC data (its `run_backtest` accepts pre-built DataFrames for
+exactly this).
 
 ## Disclaimer
 
 This is research/education tooling, not financial advice. Trading involves
 risk of loss. Review and understand every agent's logic — especially
-`risk_manager.py`, `agents/execution.py`, and `robinhood_mcp/live_broker.py` —
-before ever setting `ROBINHOOD_MCP_MODE=live` against a real brokerage account.
+`risk_manager.py`/`crypto_risk_manager.py`, `agents/execution.py`/
+`agents/crypto_execution.py`, and `robinhood_mcp/live_broker.py`/
+`robinhood_mcp/crypto_live_broker.py` — before ever setting
+`ROBINHOOD_MCP_MODE=live` against a real brokerage account. The crypto
+live broker in particular has not been exercised against a real account
+(see **Crypto** above).

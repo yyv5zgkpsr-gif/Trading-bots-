@@ -89,11 +89,35 @@ class RiskDecision:
 
 
 @dataclass
+class CryptoRiskDecision:
+    """Same shape as RiskDecision, with a fractional quantity instead of a
+    whole-share count — crypto trades in fractions of a coin."""
+
+    approved: bool
+    action: str  # BUY / SELL / HOLD
+    position_size_usd: float
+    position_size_quantity: float
+    stop_loss_price: Optional[float]
+    take_profit_price: Optional[float]
+    reasoning: str
+    entry_price: Optional[float] = None
+
+
+@dataclass
 class ExecutionResult:
     executed: bool
     dry_run: bool
     order_id: Optional[str]
     details: str
+
+
+@dataclass
+class CryptoTradeDecision:
+    symbol: str
+    technical: TechnicalReport
+    debate: DebateResult
+    risk: CryptoRiskDecision
+    execution: Optional[ExecutionResult]
 
 
 @dataclass
