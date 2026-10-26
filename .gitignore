@@ -9,3 +9,7 @@ venv/
 robinhood_mcp/paper_state.json
 robinhood_mcp/risk_levels.json
 robinhood_mcp/crypto_paper_state.json
+# Trained models are a per-user output of `python -m ml.train`, not source —
+# everyone trains their own from their own data/settings.
+ml/models/*.joblib
+ml/models/*.json

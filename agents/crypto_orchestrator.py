@@ -6,13 +6,16 @@ from agents.crypto_debate import CryptoDebateAgent
 from agents.crypto_execution import CryptoExecutionAgent
 from agents.crypto_risk_manager import CryptoRiskManagerAgent
 from agents.crypto_technical import CryptoTechnicalAgent
+from agents.ml_crypto_debate import MLCryptoDebateAgent
 
 
 class CryptoOrchestrator:
     """Coordinates the crypto pipeline for one symbol:
 
-    Technical -> Debate (technical score only) -> Risk Manager -> Execution
-    (Robinhood MCP, crypto tools, dry-run by default).
+    Technical -> Debate (technical score, or a trained ML model's
+    prediction when USE_ML_SIGNAL=true — see agents/ml_crypto_debate.py)
+    -> Risk Manager -> Execution (Robinhood MCP, crypto tools, dry-run by
+    default).
 
     Narrower than Orchestrator (agents/orchestrator.py) on purpose: there is
     no news/fundamental/sentiment/regime pipeline for crypto yet, so this
@@ -21,7 +24,10 @@ class CryptoOrchestrator:
 
     def __init__(self):
         self.technical_agent = CryptoTechnicalAgent()
-        self.debate_agent = CryptoDebateAgent()
+        if os.environ.get("USE_ML_SIGNAL", "false").lower() == "true":
+            self.debate_agent = MLCryptoDebateAgent()
+        else:
+            self.debate_agent = CryptoDebateAgent()
         self.risk_agent = CryptoRiskManagerAgent()
         self.execution_agent = CryptoExecutionAgent()
 

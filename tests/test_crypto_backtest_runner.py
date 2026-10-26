@@ -53,3 +53,34 @@ def test_run_crypto_backtest_sizes_positions_in_fractional_quantities():
     assert portfolio.trades  # the strong uptrend should have triggered at least one trade
     # position sizing is USD-based (fraction of equity / price), so quantities are fractional BTC, not whole coins
     assert any(0 < t.quantity < 1 for t in portfolio.trades)
+
+
+def test_run_crypto_backtest_uses_a_custom_decide_fn_when_given_one(monkeypatch):
+    """ml/evaluate.py relies on swapping in a different decide_fn (the
+    ML-backed one) through the exact same loop; lock in that the override
+    is actually used instead of the default rule-based decide()."""
+    price_history = _synthetic_ohlc(300, seed=1)
+    calls = []
+
+    def fake_decide(symbol, price_history_slice, equity, risk_agent):
+        calls.append(symbol)
+        from models.schemas import CryptoRiskDecision, DebateResult, Direction
+
+        debate = DebateResult(bull_thesis="stub", bear_thesis="stub", conviction=0.0, recommendation=Direction.NEUTRAL)
+        risk = CryptoRiskDecision(
+            approved=False,
+            action="HOLD",
+            position_size_usd=0.0,
+            position_size_quantity=0.0,
+            stop_loss_price=None,
+            take_profit_price=None,
+            reasoning="stub always holds",
+        )
+        return risk, debate
+
+    portfolio, _metrics = run_crypto_backtest(
+        "BTC", starting_cash=10_000, price_history=price_history, decide_fn=fake_decide
+    )
+
+    assert len(calls) > 0
+    assert portfolio.trades == []  # the stub decide_fn never approves a trade

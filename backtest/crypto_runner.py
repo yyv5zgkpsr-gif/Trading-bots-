@@ -8,13 +8,14 @@ applies — see backtest/runner.py's docstring for the caveat).
 """
 
 import os
+from typing import Callable
 
 import pandas as pd
 
 from agents.crypto_risk_manager import CryptoRiskManagerAgent
 from agents.crypto_technical import to_yfinance_crypto_symbol
 from backtest.crypto_engine import CryptoPortfolio
-from backtest.crypto_strategy import decide
+from backtest.crypto_strategy import decide as default_decide
 from backtest.metrics import BacktestMetrics, compute_metrics
 from data.market_data import fetch_price_history
 
@@ -26,9 +27,17 @@ def run_crypto_backtest(
     period: str = "2y",
     starting_cash: float = 10_000.0,
     price_history: pd.DataFrame = None,
+    decide_fn: Callable = default_decide,
 ) -> tuple[CryptoPortfolio, BacktestMetrics]:
-    """Runs the technical+risk-manager crypto strategy over historical daily
-    bars. Pass `price_history` directly (e.g. in tests) to skip the network
+    """Runs a crypto strategy over historical daily bars, day by day, no
+    lookahead. `decide_fn` defaults to backtest/crypto_strategy.py's
+    rule-based technical-score decide(); pass a different one (same
+    `(symbol, price_history_slice, equity, risk_agent) -> (risk, debate)`
+    signature, e.g. ml/ml_strategy.py's decide with the model bound via
+    functools.partial) to evaluate another strategy through the exact
+    same loop, on the exact same data, for an apples-to-apples comparison.
+
+    Pass `price_history` directly (e.g. in tests) to skip the network
     fetch; otherwise it's pulled via yfinance's `<SYMBOL>-USD` convention for
     `period`.
     """
@@ -72,7 +81,7 @@ def run_crypto_backtest(
             next_open = float(price_history.loc[next_date, "Open"])
             idx = price_history.index.get_loc(date)
 
-            decision, _debate = decide(
+            decision, _debate = decide_fn(
                 symbol,
                 price_history.iloc[: idx + 1],
                 portfolio.equity(float(today["Close"])),

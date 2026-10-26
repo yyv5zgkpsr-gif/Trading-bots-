@@ -8,7 +8,9 @@ from models.schemas import (
 )
 from models.schemas import CryptoRiskDecision
 
+from agents.crypto_debate import CryptoDebateAgent
 from agents.crypto_orchestrator import CryptoOrchestrator
+from agents.ml_crypto_debate import MLCryptoDebateAgent
 
 
 def _stub_reports():
@@ -110,3 +112,19 @@ def test_orchestrator_explicit_equity_overrides_live_lookup():
 
     orchestrator.execution_agent.get_account_balance.assert_not_called()
     orchestrator.risk_agent.run.assert_called_once_with(debate, technical, 5_000.0)
+
+
+def test_orchestrator_uses_rule_based_debate_by_default(monkeypatch):
+    monkeypatch.delenv("USE_ML_SIGNAL", raising=False)
+
+    orchestrator = CryptoOrchestrator()
+
+    assert isinstance(orchestrator.debate_agent, CryptoDebateAgent)
+
+
+def test_orchestrator_uses_ml_debate_when_use_ml_signal_is_set(monkeypatch):
+    monkeypatch.setenv("USE_ML_SIGNAL", "true")
+
+    orchestrator = CryptoOrchestrator()
+
+    assert isinstance(orchestrator.debate_agent, MLCryptoDebateAgent)

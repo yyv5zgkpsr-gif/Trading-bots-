@@ -141,6 +141,48 @@ against a real login — this environment has no network path to Robinhood).
 Review it, especially the position-field mapping, before trusting it with
 real money.
 
+## Machine learning signal (crypto)
+
+By default, crypto conviction is the rule-based technical score
+(`agents/crypto_debate.py`). `USE_ML_SIGNAL=true` swaps that for a trained
+model's prediction instead (`agents/ml_crypto_debate.py`) — same
+`CryptoOrchestrator` wiring, same `CONVICTION_THRESHOLD` gate, same risk
+sizing; only where conviction comes from changes.
+
+```bash
+pip install -r requirements-ml.txt
+python -m ml.train BTC --period 5y                      # needs real network access — see its docstring
+python -m ml.train ETH --period 5y --horizon 10 --threshold 0.03
+```
+
+This builds features (`ml/features.py`: RSI, MACD histogram, price vs.
+SMA20/50, rolling returns, 20-day volatility, distance from the 20-day
+high/low) and labels (`ml/dataset.py`: did the price move more than
+`--threshold` over the next `--horizon` days), trains a `RandomForestClassifier`
+on a **chronological** 60/20/20 train/validation/test split (never
+shuffled — that would leak future bars into training), and evaluates it
+two ways: classifier metrics, and a full backtest through
+`backtest/crypto_runner.py`'s exact day-by-day loop with the model's
+conviction standing in for the technical score (`ml/evaluate.py`).
+
+**"Trained" is not the bar for live/paper trading — "trained AND
+backtested profitably on data it never trained on" is.** `ml/train.py`
+only writes `profitable: true` to the model's metadata file if *both* the
+validation and test fold backtests show a positive return with at least
+a few trades each (`ml/train.py`'s `is_profitable`). `agents/ml_crypto_debate.py`
+reads that metadata before using any model and **refuses to load one that
+isn't marked profitable** — a missing metadata file, a non-profitable
+result, or no model at all for a symbol all fail loud (`ModelNotReadyError`)
+rather than silently falling back to trading on an unvalidated model.
+That failure is caught per-symbol by `crypto_watchlist.py`/`crypto_daemon.py`
+the same way any other per-symbol error is, so one untrained symbol in a
+multi-symbol run doesn't stop the others.
+
+Models are per-symbol (`ml/models/<symbol>_direction.joblib` +
+`<symbol>_direction.json` by default, overridable via `ML_MODEL_DIR`) —
+train one for every symbol you intend to run with `USE_ML_SIGNAL=true`.
+Trained models are gitignored; everyone trains their own.
+
 ## Backtesting before you tune for trade frequency
 
 Before loosening `MIN_CONVICTION` or scanning more tickers to get *more*
