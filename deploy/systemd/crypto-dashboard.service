@@ -1,0 +1,17 @@
+[Unit]
+Description=Crypto trading dashboard (mobile status/start/stop for the trading daemon + exit monitor)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Same user as the other two units, on purpose — see deploy/README.md.
+User=trading
+WorkingDirectory=/opt/trading-bots
+EnvironmentFile=/opt/trading-bots/.env
+ExecStart=/opt/trading-bots/.venv/bin/uvicorn dashboard.app:app --host 0.0.0.0 --port 8000
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

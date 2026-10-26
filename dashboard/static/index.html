@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Crypto Trading Dashboard</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    margin: 0;
+    padding: 16px;
+    background: #0b0e14;
+    color: #e6e6e6;
+    max-width: 480px;
+    margin: 0 auto;
+  }
+  h1 { font-size: 1.3rem; margin: 0 0 16px; }
+  .card {
+    background: #161b22;
+    border: 1px solid #2a2f3a;
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 14px;
+  }
+  .card h2 { font-size: 1rem; margin: 0 0 8px; display: flex; align-items: center; gap: 8px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .dot.on { background: #3fb950; }
+  .dot.off { background: #6e7681; }
+  .row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  button {
+    flex: 1;
+    min-width: 100px;
+    padding: 12px;
+    border-radius: 8px;
+    border: none;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button.start { background: #238636; color: white; }
+  button.stop { background: #da3633; color: white; }
+  button:disabled { opacity: 0.4; }
+  .meta { font-size: 0.85rem; color: #9da7b3; margin-top: 6px; }
+  .log {
+    background: #0d1117;
+    border-radius: 6px;
+    padding: 8px;
+    margin-top: 10px;
+    max-height: 160px;
+    overflow-y: auto;
+    font-family: ui-monospace, monospace;
+    font-size: 0.72rem;
+    line-height: 1.4;
+    color: #8b949e;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .error { color: #f85149; font-size: 0.85rem; margin-top: 8px; }
+  input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px;
+    border-radius: 6px;
+    border: 1px solid #2a2f3a;
+    background: #0d1117;
+    color: #e6e6e6;
+    margin-top: 6px;
+    font-size: 0.9rem;
+  }
+  label { font-size: 0.8rem; color: #9da7b3; }
+</style>
+</head>
+<body>
+  <h1>Crypto Trading Dashboard</h1>
+
+  <div class="card">
+    <h2><span id="trading-dot" class="dot off"></span>Trading daemon</h2>
+    <div class="meta" id="trading-meta">loading…</div>
+    <label>Symbols (comma-separated)</label>
+    <input id="symbols-input" placeholder="BTC,ETH,SOL" value="BTC,ETH">
+    <label>Interval (minutes)</label>
+    <input id="interval-input" type="number" value="15" min="1">
+    <div class="row">
+      <button class="start" id="start-trading">Start</button>
+      <button class="stop" id="stop-trading">Stop</button>
+    </div>
+    <div class="log" id="trading-log"></div>
+  </div>
+
+  <div class="card">
+    <h2><span id="monitor-dot" class="dot off"></span>Exit monitor (stop-loss / take-profit)</h2>
+    <div class="meta">Enforces stop-loss/take-profit on whatever the trading daemon opens. Run this whenever the daemon runs — it does a different job, not a backup of it.</div>
+    <div class="row">
+      <button class="start" id="start-monitor">Start</button>
+      <button class="stop" id="stop-monitor">Stop</button>
+    </div>
+    <div class="log" id="monitor-log"></div>
+  </div>
+
+  <div class="error" id="error"></div>
+
+<script>
+  const tokenKey = "dashboardToken";
+
+  function getToken() {
+    let token = localStorage.getItem(tokenKey);
+    if (!token) {
+      token = prompt("Dashboard token:");
+      if (token) localStorage.setItem(tokenKey, token);
+    }
+    return token;
+  }
+
+  async function api(path, options = {}) {
+    const token = getToken();
+    const res = await fetch(path, {
+      ...options,
+      headers: { ...(options.headers || {}), "Authorization": "Bearer " + token, "Content-Type": "application/json" },
+    });
+    if (res.status === 401) {
+      localStorage.removeItem(tokenKey);
+      throw new Error("Invalid token — reload to re-enter it.");
+    }
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail || ("HTTP " + res.status));
+    }
+    return res.json();
+  }
+
+  function renderLog(el, lines) {
+    el.textContent = lines.join("\n");
+    el.scrollTop = el.scrollHeight;
+  }
+
+  async function refresh() {
+    try {
+      const status = await api("/api/status");
+      document.getElementById("error").textContent = "";
+
+      const t = status.trading;
+      document.getElementById("trading-dot").className = "dot " + (t.running ? "on" : "off");
+      document.getElementById("trading-meta").textContent = t.running
+        ? `Running: ${t.symbols.join(", ")} every ${t.interval_minutes} min`
+        : "Stopped";
+      renderLog(document.getElementById("trading-log"), t.recent_log);
+
+      const m = status.monitor;
+      document.getElementById("monitor-dot").className = "dot " + (m.running ? "on" : "off");
+      renderLog(document.getElementById("monitor-log"), m.recent_log);
+    } catch (err) {
+      document.getElementById("error").textContent = err.message;
+    }
+  }
+
+  document.getElementById("start-trading").onclick = async () => {
+    const symbols = document.getElementById("symbols-input").value.split(",").map(s => s.trim()).filter(Boolean);
+    const interval_minutes = parseFloat(document.getElementById("interval-input").value) || 15;
+    try {
+      await api("/api/trading/start", { method: "POST", body: JSON.stringify({ symbols, interval_minutes }) });
+      refresh();
+    } catch (err) {
+      document.getElementById("error").textContent = err.message;
+    }
+  };
+
+  document.getElementById("stop-trading").onclick = async () => {
+    try { await api("/api/trading/stop", { method: "POST", body: "{}" }); refresh(); }
+    catch (err) { document.getElementById("error").textContent = err.message; }
+  };
+
+  document.getElementById("start-monitor").onclick = async () => {
+    try { await api("/api/monitor/start", { method: "POST", body: "{}" }); refresh(); }
+    catch (err) { document.getElementById("error").textContent = err.message; }
+  };
+
+  document.getElementById("stop-monitor").onclick = async () => {
+    try { await api("/api/monitor/stop", { method: "POST", body: "{}" }); refresh(); }
+    catch (err) { document.getElementById("error").textContent = err.message; }
+  };
+
+  refresh();
+  setInterval(refresh, 5000);
+</script>
+</body>
+</html>

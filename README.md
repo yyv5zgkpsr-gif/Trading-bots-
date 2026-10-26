@@ -326,6 +326,25 @@ daemon alone opens positions nothing then protects. See `deploy/README.md`
 for ready-made systemd units and a Dockerfile/docker-compose.yml to run
 both under real process supervision (auto-restart on crash or reboot).
 
+**Controlling it from your phone:** `dashboard/app.py` runs both of those
+same loops inside one FastAPI service with a mobile status/start/stop
+page, instead of two services you'd otherwise SSH in to manage:
+
+```bash
+pip install -r requirements-dashboard.txt
+DASHBOARD_TOKEN=<a long random string> uvicorn dashboard.app:app --host 0.0.0.0 --port 8000
+```
+
+Open `http://<server>:8000/` on your phone, enter the token once (it's
+remembered), and start/stop the trading daemon and exit monitor from
+there — the page polls `/api/status` every few seconds for live state and
+a tail of each loop's log. Use this *instead of* running
+`crypto_daemon.py`/`robinhood_mcp.monitor` separately, never alongside
+them — see `deploy/README.md`'s **Option C** for systemd/Docker units and,
+importantly, how to reach this from your phone without exposing an
+unauthenticated trading control panel to the open internet (Tailscale is
+the simplest answer).
+
 ## Tests
 
 ```bash
@@ -338,7 +357,10 @@ MCP tool wiring are exercised directly (no network), `agents/execution.py`
 and `agents/crypto_execution.py` are additionally covered by driving the
 real MCP server over stdio end to end, and `backtest/` is covered against
 synthetic OHLC data (its `run_backtest` accepts pre-built DataFrames for
-exactly this).
+exactly this). `ml/` is covered the same way (synthetic price history, no
+real training run), and `dashboard/` is covered with its trading daemon
+and exit monitor loops swapped for fakes, so no real orchestrator cycle
+or MCP subprocess runs in the test suite.
 
 ## Disclaimer
 

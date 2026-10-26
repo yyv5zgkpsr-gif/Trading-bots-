@@ -5,6 +5,11 @@
 #                      bracket orders, so nothing else does this job.
 # Neither replaces the other; run both for real unattended use.
 #
+# Want phone-reachable status/start/stop instead? Use
+# docker-compose.dashboard.yml INSTEAD of this file, not alongside it —
+# it runs both of these same loops itself, so running both compose files
+# at once means two independent trading loops placing duplicate orders.
+#
 # Edit the `command:` lines below to your actual symbol list before deploying.
 #
 # robinhood_session is mounted into both containers at the same path

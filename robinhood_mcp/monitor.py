@@ -33,6 +33,7 @@ import os
 import shlex
 import signal
 import sys
+from collections import deque
 from datetime import datetime, timezone
 
 from dotenv import load_dotenv
@@ -48,10 +49,16 @@ load_dotenv()
 
 POLL_SECONDS = float(os.environ.get("MONITOR_POLL_SECONDS", "30"))
 
+# Every log line, newest last, for dashboard/state.py to read without tailing
+# stdout/journald. Bounded so a long-running monitor can't grow this forever.
+RECENT_LOG: deque = deque(maxlen=500)
+
 
 def _log(message: str) -> None:
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    print(f"[{timestamp}] {message}", flush=True)
+    line = f"[{timestamp}] {message}"
+    print(line, flush=True)
+    RECENT_LOG.append(line)
 
 
 def _parse_blocks(result) -> list:
@@ -114,7 +121,15 @@ async def _check_once(session: ClientSession) -> None:
             _log(f"{symbol}: exit order submitted, order_id={order.get('order_id')}")
 
 
-async def run() -> None:
+async def loop_forever(stop_event: asyncio.Event = None) -> None:
+    """Runs the polling cycle forever until `stop_event` is set. Takes the
+    event instead of installing signal handlers itself so it can run as a
+    plain background task on an event loop someone else owns (e.g.
+    dashboard/app.py's, alongside FastAPI's own routes) — `run()` below is
+    the signal-wired entry point for standalone CLI use, which only works
+    when called from the main thread of the process."""
+    stop_event = stop_event or asyncio.Event()
+
     if os.environ.get("ROBINHOOD_MCP_MODE", "paper").lower() != "live":
         _log("ROBINHOOD_MCP_MODE is not 'live' — nothing to monitor (paper mode has no market data feed).")
         return
@@ -127,25 +142,31 @@ async def run() -> None:
     command_parts = shlex.split(mcp_command)
     server_params = StdioServerParameters(command=command_parts[0], args=command_parts[1:], env=dict(os.environ))
 
-    stop = asyncio.Event()
-    loop = asyncio.get_running_loop()
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, stop.set)
-
-    _log(f"Exit monitor starting (polling every {POLL_SECONDS:.0f}s). Ctrl+C to stop.")
+    _log(f"Exit monitor starting (polling every {POLL_SECONDS:.0f}s).")
     async with stdio_client(server_params) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
-            while not stop.is_set():
+            while not stop_event.is_set():
                 try:
                     await _check_once(session)
                 except Exception as exc:
                     _log(f"Monitoring cycle failed: {exc}")
                 try:
-                    await asyncio.wait_for(stop.wait(), timeout=POLL_SECONDS)
+                    await asyncio.wait_for(stop_event.wait(), timeout=POLL_SECONDS)
                 except asyncio.TimeoutError:
                     pass
     _log("Exit monitor stopped.")
+
+
+async def run() -> None:
+    """CLI entry point: wires SIGINT/SIGTERM to a stop_event, then runs
+    loop_forever. Ctrl+C to stop."""
+    stop_event = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, stop_event.set)
+
+    await loop_forever(stop_event)
 
 
 def main() -> None:

@@ -58,6 +58,48 @@ challenge each one independently with its own email/SMS verification.
 `crypto_paper_state.json`, and `risk_levels.json` across container
 restarts (they'd otherwise reset every redeploy).
 
+## Option C: Dashboard (phone-reachable status + start/stop)
+
+`dashboard/app.py` runs the same two loops as Options A/B, but inside
+one process you control from your phone instead of two standalone
+services — see the README's **Running the crypto bot continuously**
+section for what it looks like day to day. **Use this instead of
+Option A/B, never alongside them** — the dashboard starts its own copy
+of both loops internally, so running it next to the standalone
+`crypto-trading-daemon`/`trading-daemon` service means two independent
+loops placing duplicate orders.
+
+```bash
+# systemd:
+sudo cp deploy/systemd/crypto-dashboard.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now crypto-dashboard
+
+# or Docker Compose (note the different compose file):
+docker compose -f docker-compose.dashboard.yml up -d
+```
+
+Set `DASHBOARD_TOKEN` in `.env` first (any long random string, e.g.
+`openssl rand -hex 32`) — the app refuses to start without one, since its
+`/api/*` routes start and stop real trading. Set `AUTO_START_TRADING=true`
++ `DASHBOARD_SYMBOLS=BTC,ETH` (+ `AUTO_START_MONITOR=true`) in `.env` if
+you want it trading immediately on boot rather than waiting for a tap
+from your phone; the phone controls work as a kill switch either way.
+
+**Getting this to your phone safely:** the dashboard's own auth is just a
+bearer token — fine on a private network, not enough on the open
+internet, where that token would travel in the clear and anyone who found
+the URL could try it. Two reasonable options, easiest first:
+
+- **Tailscale (recommended for personal use):** install Tailscale on the
+  server and on your phone, both joined to the same private network. You
+  reach the dashboard at the server's Tailscale IP/hostname — nothing is
+  exposed to the public internet at all, no certificates to manage.
+- **A reverse proxy with a real TLS certificate** (e.g. Caddy or nginx +
+  Let's Encrypt) in front of the dashboard, if you specifically want it
+  reachable from the open internet. Terminate HTTPS there; don't expose
+  uvicorn's HTTP port directly.
+
 ## Before enabling either one for real
 
 1. Run `python -m backtest.crypto_runner <symbol>` and
