@@ -234,6 +234,26 @@ python main.py AAPL
 python main.py AAPL --equity 25000 --json
 ```
 
+**Running more than one symbol** — `watchlist.py` (stocks) and
+`crypto_watchlist.py` (crypto) run the full pipeline across several
+tickers in one process, one after another:
+
+```bash
+python watchlist.py AAPL MSFT NVDA
+python watchlist.py --file my_watchlist.txt --json
+python crypto_watchlist.py BTC ETH SOL
+```
+
+Leave `--equity` unset (the default) for a multi-symbol run: each ticker
+then re-queries live/paper account equity before sizing, so the 3rd
+ticker's size already accounts for cash spent on the first two. Passing
+a fixed `--equity` reuses that same number for every ticker in the run
+regardless of what was already committed — the CLI warns about this, and
+it should only be used for testing against a deliberately smaller budget,
+never to size a real multi-ticker live run. A ticker that fails (bad
+symbol, a flaky data fetch) is reported as failed and does not stop the
+rest of the watchlist.
+
 ## Trying the full pipeline against the bundled paper broker
 
 ```bash
