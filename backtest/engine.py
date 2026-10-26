@@ -3,6 +3,10 @@ trade log, and a daily equity curve. Long-only, one symbol — this mirrors
 what robinhood_mcp/paper_broker.py actually allows (it rejects a sell beyond
 what you hold, so initiating a short is not something this pipeline can
 really do against either broker today).
+
+Trade/EquityPoint are shared with backtest/crypto_engine.py's
+CryptoPortfolio (same shape, fractional quantity instead of whole shares)
+so backtest/metrics.py's compute_metrics() works unchanged for both.
 """
 
 from dataclasses import dataclass
@@ -15,7 +19,7 @@ class Trade:
     date: object  # pandas.Timestamp
     action: str  # BUY / SELL
     reason: str  # "signal", "stop_loss", or "take_profit"
-    shares: int
+    quantity: float  # whole shares for Portfolio, fractional for CryptoPortfolio
     price: float
     cash_after: float
     equity_after: float

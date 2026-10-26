@@ -125,14 +125,14 @@ a smaller pipeline on purpose, not a degraded one; extend it the same way
 the stock side extended from technical-only before fundamentals/sentiment
 existed, if you want more signal.
 
-**Exit monitoring and the backtester both already cover crypto with no
-changes**, because they're symbol-agnostic: `robinhood_mcp/risk_ledger.py`
-and `robinhood_mcp/monitor.py` don't care whether a symbol is a stock or
-`BTC`, and `backtest/runner.py`'s technical+risk-manager loop works on any
-OHLC history you hand it — fetch crypto history via `yfinance`'s
-`BTC-USD`/`ETH-USD` convention (see `agents/crypto_technical.py` for the
-symbol mapping Robinhood's bare-ticker API needs vs. yfinance's) and pass
-it to `backtest.runner.run_backtest` the same way.
+**Exit monitoring already covers crypto with no changes**, because it's
+symbol-agnostic: `robinhood_mcp/risk_ledger.py` and
+`robinhood_mcp/monitor.py` don't care whether a symbol is a stock or `BTC`.
+The backtester has a dedicated crypto version — see
+[Backtesting before you tune for trade frequency](#backtesting-before-you-tune-for-trade-frequency)
+below — rather than reusing the stock one, because crypto position sizes
+are fractional and `backtest/engine.py`'s `Portfolio` floors purchases to
+whole shares.
 
 **Unverified against a real account, same honesty as live_broker.py:**
 `robinhood_mcp/crypto_live_broker.py` is built from `robin_stocks`'
@@ -172,6 +172,29 @@ performance will differ, in either direction. Use it to sanity-check
 `MAX_POSITION_PCT`, `MIN_CONVICTION`, `DEFAULT_STOP_LOSS_PCT`, and
 `DEFAULT_TAKE_PROFIT_PCT` against real numbers before changing them, not as
 a guarantee of live results.
+
+**Crypto has its own backtest module**, for the same reason the live
+pipeline is separate: `backtest/crypto_engine.py`'s `CryptoPortfolio` sizes
+and fills positions in fractional quantities instead of flooring to whole
+shares, and `backtest/crypto_strategy.py` mirrors
+`agents/crypto_debate.py`'s narrower technical-score-only conviction (no
+regime input) and sizes through `agents/crypto_risk_manager.py`.
+
+```bash
+python -m backtest.crypto_runner BTC --period 2y
+python -m backtest.crypto_runner ETH --period 5y --equity 5000
+```
+
+It replays the same day-by-day, no-lookahead discipline as the stock
+runner (decide on today's close, fill at tomorrow's open, check
+stop-loss/take-profit against each day's High/Low) over yfinance's
+`BTC-USD`/`ETH-USD` daily bars, and reports the same metrics. It inherits
+the same caveat as the stock backtest — no news/fundamental/sentiment
+input to validate, because the live crypto pipeline doesn't have those
+agents either — plus one more: crypto trades 24/7 but yfinance still hands
+back one daily bar, so this approximates a continuous market with the same
+daily-bar granularity the stock backtest uses for a market that's only
+open 6.5 hours a day.
 
 ## Setup
 

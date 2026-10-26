@@ -39,7 +39,7 @@ def test_sell_cannot_exceed_held_shares():
     portfolio.sell("d2", 100, 110.0)  # only 5 held
 
     assert portfolio.shares == 0
-    assert portfolio.trades[-1].shares == 5
+    assert portfolio.trades[-1].quantity == 5
 
 
 def test_sell_credits_cash_and_resets_avg_price_when_flat():

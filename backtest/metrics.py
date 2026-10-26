@@ -27,18 +27,18 @@ def _round_trips(portfolio: Portfolio) -> list[float]:
     each round trip's return, as a fraction (0.05 == +5%). A long-only
     position can be built from several BUYs and unwound by several SELLs;
     this walks both queues together rather than assuming one-for-one."""
-    open_lots = []  # list of [shares_remaining, buy_price]
+    open_lots = []  # list of [quantity_remaining, buy_price]
     round_trip_returns = []
 
     for trade in portfolio.trades:
         if trade.action == "BUY":
-            open_lots.append([trade.shares, trade.price])
+            open_lots.append([trade.quantity, trade.price])
             continue
 
-        remaining_to_sell = trade.shares
+        remaining_to_sell = trade.quantity
         while remaining_to_sell > 0 and open_lots:
-            lot_shares, lot_price = open_lots[0]
-            matched = min(lot_shares, remaining_to_sell)
+            lot_quantity, lot_price = open_lots[0]
+            matched = min(lot_quantity, remaining_to_sell)
             round_trip_returns.append((trade.price - lot_price) / lot_price)
             open_lots[0][0] -= matched
             remaining_to_sell -= matched
