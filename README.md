@@ -196,6 +196,29 @@ back one daily bar, so this approximates a continuous market with the same
 daily-bar granularity the stock backtest uses for a market that's only
 open 6.5 hours a day.
 
+**Once you have a backtest, search for better parameters before scaling
+up** — `backtest/optimize.py` grid-searches `MIN_CONVICTION` and the
+stop-loss/take-profit percents against one already-fetched history, so
+you're comparing combinations against the exact same data instead of
+re-fetching (and re-sampling) per run:
+
+```bash
+python -m backtest.optimize AAPL --period 2y
+python -m backtest.optimize BTC --asset-class crypto --period 2y --rank-by total_return_pct
+```
+
+It drops any combination with fewer than `--min-trades` (default 5)
+round trips before ranking — a config that "won" on two lucky trades
+isn't a better strategy, it's noise that return-only ranking would
+otherwise surface as one. Works by setting each combination's env vars
+and re-running `run_backtest`/`run_crypto_backtest`, which is only valid
+because both construct their risk manager fresh on every call and read
+every sizing knob from the environment at that moment — nothing about
+either strategy is cached across calls. Use the leaderboard to pick a
+`MIN_CONVICTION`/stop/target combination, set it as the real env var, and
+re-run the single backtest above to confirm before touching live or
+paper trading settings.
+
 ## Setup
 
 ```bash
