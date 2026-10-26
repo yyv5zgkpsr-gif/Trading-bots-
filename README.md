@@ -267,6 +267,23 @@ so orders fill against the local simulated ledger. `main.py` itself never
 knows the difference — it always talks to `ExecutionAgent`, which always talks
 to whatever `ROBINHOOD_MCP_COMMAND` points at.
 
+## Running the crypto bot continuously
+
+Crypto trades 24/7 and Robinhood's Pattern Day Trader rule doesn't apply to
+it, so unattended operation means two long-running processes instead of
+one-off CLI calls:
+
+```bash
+python crypto_daemon.py BTC ETH --interval-minutes 15   # places entries, forever
+python -m robinhood_mcp.monitor                           # enforces stop-loss/take-profit, forever
+```
+
+Run both, always — the monitor is what actually closes a position when its
+stop-loss/take-profit is breached (Robinhood has no bracket orders); the
+daemon alone opens positions nothing then protects. See `deploy/README.md`
+for ready-made systemd units and a Dockerfile/docker-compose.yml to run
+both under real process supervision (auto-restart on crash or reboot).
+
 ## Tests
 
 ```bash

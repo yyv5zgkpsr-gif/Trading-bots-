@@ -1,0 +1,19 @@
+[Unit]
+Description=Crypto exit monitor (stop-loss/take-profit enforcement via Robinhood MCP)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Same user as crypto-trading-daemon.service, on purpose: both need the same
+# ~/.tokens robin_stocks session (see deploy/README.md) and the same
+# robinhood_mcp/risk_levels.json ledger.
+User=trading
+WorkingDirectory=/opt/trading-bots
+EnvironmentFile=/opt/trading-bots/.env
+ExecStart=/opt/trading-bots/.venv/bin/python -m robinhood_mcp.monitor
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
