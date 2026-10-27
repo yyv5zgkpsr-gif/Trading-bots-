@@ -1,5 +1,7 @@
 # Trading Bots — Multi-Agent Trading Orchestrator
 
+[![Tests](https://github.com/yyv5zgkpsr-gif/Trading-bots-/actions/workflows/tests.yml/badge.svg)](https://github.com/yyv5zgkpsr-gif/Trading-bots-/actions/workflows/tests.yml)
+
 A pipeline of specialized agents that research a ticker from several angles, debate
 it, size a risk-bounded trade, and (optionally) execute it — with real order
 placement gated behind an explicit opt-in and routed exclusively through a
@@ -350,6 +352,10 @@ the simplest answer).
 ```bash
 pytest
 ```
+
+A GitHub Actions workflow (`.github/workflows/tests.yml`) runs the full
+suite on every push to `main` and every pull request — the badge at the
+top of this file reflects its latest result.
 
 Tests mock all network calls (`yfinance`, news, LLM) so they run offline and
 deterministically. The `robinhood_mcp` paper brokers (stock and crypto) and
