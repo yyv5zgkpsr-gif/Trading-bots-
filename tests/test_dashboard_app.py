@@ -135,6 +135,20 @@ def test_starting_monitor_twice_returns_409(client, monkeypatch):
     client.post("/api/monitor/stop", headers=AUTH, json={})
 
 
+def test_get_account_requires_a_token(client):
+    res = client.get("/api/account")
+    assert res.status_code == 401
+
+
+def test_get_account_returns_the_state_snapshot(client, monkeypatch):
+    monkeypatch.setattr(state, "account_snapshot", lambda: {"balance": 999.0, "positions": []})
+
+    res = client.get("/api/account", headers=AUTH)
+
+    assert res.status_code == 200
+    assert res.json() == {"balance": 999.0, "positions": []}
+
+
 def test_auto_start_trading_and_monitor_from_env_vars(monkeypatch):
     """A fresh `with TestClient(app)` re-runs the app's lifespan, so this
     exercises AUTO_START_TRADING/AUTO_START_MONITOR independently of the

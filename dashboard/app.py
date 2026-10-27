@@ -93,6 +93,13 @@ def get_status(_: None = Depends(require_token)):
     }
 
 
+@app.get("/api/account")
+def get_account(_: None = Depends(require_token)):
+    # Deliberately separate from /api/status: this spawns the MCP server
+    # subprocess, too slow/heavy to do on every few-second status poll.
+    return state.account_snapshot()
+
+
 @app.post("/api/trading/start")
 def start_trading(body: StartTradingRequest, _: None = Depends(require_token)):
     symbols = [s.upper() for s in body.symbols]

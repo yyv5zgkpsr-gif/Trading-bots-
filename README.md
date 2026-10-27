@@ -340,7 +340,10 @@ DASHBOARD_TOKEN=<a long random string> uvicorn dashboard.app:app --host 0.0.0.0 
 Open `http://<server>:8000/` on your phone, enter the token once (it's
 remembered), and start/stop the trading daemon and exit monitor from
 there — the page polls `/api/status` every few seconds for live state and
-a tail of each loop's log. Use this *instead of* running
+a tail of each loop's log. A separate **Account** card hits `/api/account`
+on demand (buying power + open positions, straight from the MCP server —
+not auto-polled, since spawning that subprocess every few seconds would
+be wasteful). Use this *instead of* running
 `crypto_daemon.py`/`robinhood_mcp.monitor` separately, never alongside
 them — see `deploy/README.md`'s **Option C** for systemd/Docker units and,
 importantly, how to reach this from your phone without exposing an

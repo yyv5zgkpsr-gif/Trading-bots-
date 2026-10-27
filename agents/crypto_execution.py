@@ -25,7 +25,8 @@ except ImportError:  # pragma: no cover - exercised only when dependency missing
     stdio_client = None
 
 
-def _extract_order_id(payload: dict):
+def _extract_order_id(blocks: list):
+    payload = blocks[0] if blocks else {}
     if "error" in payload:
         raise RuntimeError(payload["error"])
     return payload.get("order_id")
@@ -86,7 +87,8 @@ class CryptoExecutionAgent(Agent):
         if not self.enable_live or not self.mcp_command or ClientSession is None:
             return None
 
-        def _extract_balance(payload: dict):
+        def _extract_balance(blocks: list):
+            payload = blocks[0] if blocks else {}
             for key in ("buying_power", "equity", "cash"):
                 if payload.get(key) is not None:
                     try:
@@ -100,10 +102,27 @@ class CryptoExecutionAgent(Agent):
         except Exception:
             return None
 
+    def get_positions(self) -> Optional[list]:
+        """Live crypto positions from the MCP server's get_crypto_positions
+        tool: a list of {symbol, quantity, average buy price} dicts. Returns
+        None (never raises) when live trading isn't configured or the call
+        fails, same contract as get_account_balance()."""
+        if not self.enable_live or not self.mcp_command or ClientSession is None:
+            return None
+
+        try:
+            return asyncio.run(self._call_tool("get_crypto_positions", {}, lambda blocks: blocks))
+        except Exception:
+            return None
+
     async def _call_tool(self, tool_name: str, arguments: dict, extract):
         """Opens an MCP session, calls `tool_name`, and applies `extract` to
-        the first parseable JSON text block of the response (raw text if
-        not JSON). Forwards the full environment to the spawned server —
+        every parseable JSON text block of the response (as a list — a
+        dict-returning tool sends exactly one block, but a list-returning
+        tool sends one block PER ITEM over this MCP version's stdio
+        transport, not a single JSON array; see robinhood_mcp/monitor.py's
+        _parse_blocks for where this was first verified against the real
+        transport). Forwards the full environment to the spawned server —
         see agents/execution.py for why that matters."""
         command_parts = shlex.split(self.mcp_command)
         server_params = StdioServerParameters(
@@ -113,10 +132,12 @@ class CryptoExecutionAgent(Agent):
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 result = await session.call_tool(tool_name, arguments=arguments)
+                blocks = []
                 for block in result.content:
                     if getattr(block, "type", "") == "text":
                         try:
-                            return extract(json.loads(block.text))
-                        except (json.JSONDecodeError, AttributeError):
-                            return block.text
+                            blocks.append(json.loads(block.text))
+                        except json.JSONDecodeError:
+                            blocks.append(block.text)
+                return extract(blocks)
                 return None

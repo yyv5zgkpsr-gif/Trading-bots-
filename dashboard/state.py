@@ -17,6 +17,7 @@ import threading
 from dataclasses import dataclass, field
 
 import crypto_daemon
+from agents.crypto_execution import CryptoExecutionAgent
 from robinhood_mcp import monitor as exit_monitor
 
 
@@ -94,3 +95,19 @@ class DashboardState:
     def monitor_status(self) -> MonitorStatus:
         running = self._monitor_task is not None and not self._monitor_task.done()
         return MonitorStatus(running=running, recent_log=list(exit_monitor.RECENT_LOG)[-50:])
+
+    # --- account/positions (on demand, not part of the fast status poll:
+    # each call spawns the MCP server subprocess, which is too slow/heavy
+    # to do every few seconds alongside get_status()) ---
+
+    def account_snapshot(self) -> dict:
+        """Live crypto buying power + open positions via a fresh
+        CryptoExecutionAgent — works whenever ENABLE_LIVE_TRADING=true,
+        including the paper-mode setup used to test the live code path
+        safely. Returns None for both fields (not an error) if live
+        execution isn't configured at all."""
+        agent = CryptoExecutionAgent()
+        return {
+            "balance": agent.get_account_balance(),
+            "positions": agent.get_positions(),
+        }

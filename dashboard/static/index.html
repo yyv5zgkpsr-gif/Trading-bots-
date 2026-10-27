@@ -89,6 +89,16 @@
   </div>
 
   <div class="card">
+    <h2>Account</h2>
+    <div class="meta">Not polled automatically — this spawns the MCP server each time, so it's refresh-on-demand.</div>
+    <div class="row">
+      <button class="start" id="refresh-account" style="background:#30363d;">Refresh</button>
+    </div>
+    <div class="meta" id="account-balance"></div>
+    <div class="log" id="account-positions"></div>
+  </div>
+
+  <div class="card">
     <h2><span id="monitor-dot" class="dot off"></span>Exit monitor (stop-loss / take-profit)</h2>
     <div class="meta">Enforces stop-loss/take-profit on whatever the trading daemon opens. Run this whenever the daemon runs — it does a different job, not a backup of it.</div>
     <div class="row">
@@ -178,6 +188,25 @@
   document.getElementById("stop-monitor").onclick = async () => {
     try { await api("/api/monitor/stop", { method: "POST", body: "{}" }); refresh(); }
     catch (err) { document.getElementById("error").textContent = err.message; }
+  };
+
+  document.getElementById("refresh-account").onclick = async () => {
+    const balanceEl = document.getElementById("account-balance");
+    const positionsEl = document.getElementById("account-positions");
+    balanceEl.textContent = "loading…";
+    try {
+      const account = await api("/api/account");
+      balanceEl.textContent = account.balance == null
+        ? "Not configured (ENABLE_LIVE_TRADING isn't set)"
+        : `Buying power: $${account.balance.toLocaleString()}`;
+      const positions = account.positions || [];
+      positionsEl.textContent = positions.length
+        ? positions.map(p => `${p.symbol}: ${p.quantity} @ avg $${p.average_buy_price}`).join("\n")
+        : "No open positions.";
+    } catch (err) {
+      balanceEl.textContent = "";
+      document.getElementById("error").textContent = err.message;
+    }
   };
 
   refresh();

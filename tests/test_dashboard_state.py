@@ -80,6 +80,39 @@ def test_start_monitor_runs_loop_forever_as_an_asyncio_task(monkeypatch):
     assert calls == ["started", "stopped"]
 
 
+def test_account_snapshot_returns_balance_and_positions_from_a_fresh_agent(monkeypatch):
+    class _FakeExecutionAgent:
+        def get_account_balance(self):
+            return 12_345.67
+
+        def get_positions(self):
+            return [{"symbol": "BTC", "quantity": 0.01, "average_buy_price": 50_000.0}]
+
+    monkeypatch.setattr(state_module, "CryptoExecutionAgent", _FakeExecutionAgent)
+
+    snapshot = DashboardState().account_snapshot()
+
+    assert snapshot == {
+        "balance": 12_345.67,
+        "positions": [{"symbol": "BTC", "quantity": 0.01, "average_buy_price": 50_000.0}],
+    }
+
+
+def test_account_snapshot_passes_through_none_when_not_configured(monkeypatch):
+    class _FakeExecutionAgent:
+        def get_account_balance(self):
+            return None
+
+        def get_positions(self):
+            return None
+
+    monkeypatch.setattr(state_module, "CryptoExecutionAgent", _FakeExecutionAgent)
+
+    snapshot = DashboardState().account_snapshot()
+
+    assert snapshot == {"balance": None, "positions": None}
+
+
 def test_start_monitor_twice_without_stopping_raises(monkeypatch):
     async def fake_loop_forever(stop_event):
         await stop_event.wait()
