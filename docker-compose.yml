@@ -1,0 +1,43 @@
+# Two long-running services for unattended crypto trading:
+#   - trading-daemon: places entries (crypto_daemon.py)
+#   - exit-monitor:   enforces stop-loss/take-profit on whatever trading-daemon
+#                      opens (robinhood_mcp/monitor.py) — Robinhood has no
+#                      bracket orders, so nothing else does this job.
+# Neither replaces the other; run both for real unattended use.
+#
+# Want phone-reachable status/start/stop instead? Use
+# docker-compose.dashboard.yml INSTEAD of this file, not alongside it —
+# it runs both of these same loops itself, so running both compose files
+# at once means two independent trading loops placing duplicate orders.
+#
+# Edit the `command:` lines below to your actual symbol list before deploying.
+#
+# robinhood_session is mounted into both containers at the same path
+# (~/.tokens, where robin_stocks stores its login session + device token).
+# Without a SHARED volume there, each container would log in as a separate
+# "new device" and Robinhood may challenge each one independently with its
+# own email/SMS verification. robinhood_state persists the paper-trading
+# ledger and the stop-loss/take-profit risk ledger across restarts.
+
+services:
+  trading-daemon:
+    build: .
+    env_file: .env
+    command: ["python", "crypto_daemon.py", "BTC", "ETH", "--interval-minutes", "15"]
+    volumes:
+      - robinhood_state:/app/robinhood_mcp
+      - robinhood_session:/root/.tokens
+    restart: unless-stopped
+
+  exit-monitor:
+    build: .
+    env_file: .env
+    command: ["python", "-m", "robinhood_mcp.monitor"]
+    volumes:
+      - robinhood_state:/app/robinhood_mcp
+      - robinhood_session:/root/.tokens
+    restart: unless-stopped
+
+volumes:
+  robinhood_state:
+  robinhood_session:

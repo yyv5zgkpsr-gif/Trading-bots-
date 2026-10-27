@@ -1,2 +1,8 @@
--r requirements.txt
+# Everything needed to develop and run the full test suite, including the
+# optional feature sets (live trading, ML signal, dashboard) so `pytest`
+# exercises all of it rather than silently skipping modules that fail to
+# import.
+-r requirements-live.txt
+-r requirements-ml.txt
+-r requirements-dashboard.txt
 pytest>=7.4.0

@@ -1,0 +1,4 @@
+# Only needed to run dashboard/app.py, the mobile status/control page.
+-r requirements.txt
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0

@@ -1,0 +1,28 @@
+# Alternative to docker-compose.yml's trading-daemon + exit-monitor
+# services: the dashboard runs BOTH loops itself (see dashboard/state.py),
+# with phone-reachable start/stop/status. Use this file INSTEAD of
+# docker-compose.yml, never alongside it — running both at once means two
+# independent trading loops placing duplicate orders.
+#
+#   docker compose -f docker-compose.dashboard.yml up -d
+#
+# DASHBOARD_TOKEN must be set in .env or every request gets refused (see
+# dashboard/app.py). Reaching this from your phone over the public
+# internet still needs HTTPS in front of it or a private network (e.g.
+# Tailscale) between your phone and this host — see deploy/README.md.
+
+services:
+  dashboard:
+    build: .
+    env_file: .env
+    command: ["uvicorn", "dashboard.app:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8000:8000"
+    volumes:
+      - robinhood_state:/app/robinhood_mcp
+      - robinhood_session:/root/.tokens
+    restart: unless-stopped
+
+volumes:
+  robinhood_state:
+  robinhood_session:

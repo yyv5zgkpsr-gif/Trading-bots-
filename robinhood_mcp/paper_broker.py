@@ -56,6 +56,12 @@ class PaperBroker:
         with self._lock:
             return [{"symbol": symbol, **pos} for symbol, pos in self.state["positions"].items() if pos["quantity"] != 0]
 
+    def get_quote(self, symbol: str) -> float:
+        raise BrokerError(
+            "get_quote is not supported in paper mode; there is no real market data feed. "
+            "Exit monitoring (robinhood_mcp/monitor.py) only works in ROBINHOOD_MCP_MODE=live."
+        )
+
     def place_order(
         self, symbol: str, side: str, quantity: int, order_type: str = "market", price: float = None
     ) -> dict:

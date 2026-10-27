@@ -1,0 +1,19 @@
+[Unit]
+Description=Crypto trading daemon (multi-agent pipeline via Robinhood MCP)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Run as a dedicated, unprivileged user so a bug in this code can't touch
+# anything else on the box. Create it first: sudo useradd -r -m trading
+User=trading
+WorkingDirectory=/opt/trading-bots
+EnvironmentFile=/opt/trading-bots/.env
+# Edit the symbol list below to your actual watchlist before enabling this.
+ExecStart=/opt/trading-bots/.venv/bin/python crypto_daemon.py BTC ETH --interval-minutes 15
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
